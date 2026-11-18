@@ -19,6 +19,7 @@ import tempfile
 from contextlib import nullcontext
 
 import torch
+import torch.distributed.checkpoint as dist_cp
 from transformers import AutoModel
 
 from accelerate.accelerator import Accelerator
@@ -43,8 +44,10 @@ from accelerate.utils.constants import (
     FSDP2_STATE_DICT_TYPE,
     FSDP_AUTO_WRAP_POLICY,
     FSDP_BACKWARD_PREFETCH,
+    FSDP_MODEL_NAME,
     FSDP_SHARDING_STRATEGY,
     FSDP_STATE_DICT_TYPE,
+    SAFE_WEIGHTS_NAME,
 )
 from accelerate.utils.dataclasses import FullyShardedDataParallelPlugin, GradScalerKwargs
 from accelerate.utils.fsdp_utils import (
@@ -54,6 +57,7 @@ from accelerate.utils.fsdp_utils import (
     enable_fsdp_ram_efficient_loading,
     fsdp2_prepare_auto_wrap_policy,
     load_fsdp_optimizer,
+    merge_fsdp_weights,
     save_fsdp_optimizer,
 )
 
@@ -170,6 +174,20 @@ class FSDP2OptimizerScalerStateTest(AccelerateTestCase):
 
         assert scaler.state_dict() == expected
         assert optimizer.state
+
+
+class MergeFSDPWeightsTest(AccelerateTestCase):
+    def test_parent_checkpoint_dir_points_to_model_dir(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model_dir = os.path.join(tmp_dir, FSDP_MODEL_NAME + "_0")
+            dist_cp.save({"model": {"weight": torch.ones(2)}}, checkpoint_id=model_dir, no_dist=True)
+
+            with self.assertRaises(ValueError) as cm:
+                merge_fsdp_weights(tmp_dir, os.path.join(tmp_dir, "merged"))
+            assert f"Please try passing in {model_dir} instead" in str(cm.exception)
+
+            merge_fsdp_weights(model_dir, os.path.join(tmp_dir, "merged"))
+            assert os.path.isfile(os.path.join(tmp_dir, "merged", SAFE_WEIGHTS_NAME))
 
 
 @require_non_cpu

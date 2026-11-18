@@ -506,21 +506,21 @@ def merge_fsdp_weights(
     checkpoint_dir = Path(checkpoint_dir)
     from accelerate.state import PartialState
 
-    # Verify that the checkpoint directory exists
-    if not checkpoint_dir.exists():
+    # Verify that the checkpoint directory contains distributed checkpoint metadata (global or rank-local)
+    if not (checkpoint_dir / ".metadata").is_file() and not any(checkpoint_dir.glob("__*.metadata")):
         model_path_exists = (checkpoint_dir / "pytorch_model_fsdp_0").exists()
         optimizer_path_exists = (checkpoint_dir / "optimizer_0").exists()
         err = f"Tried to load from {checkpoint_dir} but couldn't find a valid metadata file."
         if model_path_exists and optimizer_path_exists:
             err += " However, potential model and optimizer checkpoint directories exist."
-            err += f"Please pass in either {checkpoint_dir}/pytorch_model_fsdp_0 or {checkpoint_dir}/optimizer_0"
-            err += "instead."
+            err += f" Please pass in either {checkpoint_dir}/pytorch_model_fsdp_0 or {checkpoint_dir}/optimizer_0"
+            err += " instead."
         elif model_path_exists:
             err += " However, a potential model checkpoint directory exists."
-            err += f"Please try passing in {checkpoint_dir}/pytorch_model_fsdp_0 instead."
+            err += f" Please try passing in {checkpoint_dir}/pytorch_model_fsdp_0 instead."
         elif optimizer_path_exists:
             err += " However, a potential optimizer checkpoint directory exists."
-            err += f"Please try passing in {checkpoint_dir}/optimizer_0 instead."
+            err += f" Please try passing in {checkpoint_dir}/optimizer_0 instead."
         raise ValueError(err)
 
     # To setup `save` to work
